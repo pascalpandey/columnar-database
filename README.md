@@ -2,5 +2,10 @@
 
 ```bash
 go run main.go -matric="U2220371G" -data="./ResalePricesSingapore.csv"
-go test ./test -data="../ResalePricesSingapore.csv" -sorted="../column_store/sorted.csv"
+```
+
+Expects raw data file to be in `./ResalePricesSingapore.csv` and sorted file to be in `./column_store/sorted.csv`
+
+```bash
+go test ./test
 ```

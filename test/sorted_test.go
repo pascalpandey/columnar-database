@@ -2,23 +2,14 @@ package test
 
 import (
 	"encoding/csv"
-	"flag"
 	"os"
 	"sc4023/store"
 	"testing"
 	"time"
 )
 
-var filePath string
-var sortedFilePath string
-
-func init() {
-	flag.StringVar(&filePath, "data", "", "Path to CSV data file")
-	flag.StringVar(&sortedFilePath, "sorted", "", "Path to CSV data file")
-}
-
-func TestIsFileSorted(t *testing.T) {
-	file, err := os.Open(sortedFilePath)
+func TestFileSortedByMonth(t *testing.T) {
+	file, err := os.Open("../column_store/sorted.csv")
 	if err != nil {
 		t.Fatalf("Error opening file: %s", err)
 	}
@@ -48,14 +39,14 @@ func TestIsFileSorted(t *testing.T) {
 	}
 }
 
-func TestFilesHaveSameDataUnordered(t *testing.T) {
-	file1, err := os.Open(filePath)
+func TestSortedAndOriginalHaveSameData(t *testing.T) {
+	file1, err := os.Open("../ResalePricesSingapore.csv")
 	if err != nil {
 		t.Fatalf("Error opening first file: %s", err)
 	}
 	defer file1.Close()
 
-	file2, err := os.Open(sortedFilePath)
+	file2, err := os.Open("../column_store/sorted.csv")
 	if err != nil {
 		t.Fatalf("Error opening second file: %s", err)
 	}
@@ -64,9 +55,9 @@ func TestFilesHaveSameDataUnordered(t *testing.T) {
 	rows1 := readAllRows(file1, true)
 	rows2 := readAllRows(file2, false)
 
-	// if len(rows1) != len(rows2) {
-	// 	t.Fatalf("Row count mismatch: %d != %d", len(rows1), len(rows2))
-	// }
+	if len(rows1) != len(rows2) {
+		t.Fatalf("Row count mismatch: %d != %d", len(rows1), len(rows2))
+	}
 
 	counts1 := make(map[string]int)
 	counts2 := make(map[string]int)

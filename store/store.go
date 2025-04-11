@@ -3,6 +3,7 @@ package store
 import (
 	"container/heap"
 	"sc4023/limited_slice"
+	"sc4023/utils"
 )
 
 type Store struct {
@@ -13,25 +14,39 @@ type Store struct {
 }
 
 func (s Store) InitColumnStore() {
-	// sort every chunk and write to a file
-	// skip CSV header which is the first 111 bytes
-	reader := newReader(s.DataPath, 111, -1, s.LimitedSlice)
+	// sort every chunk of DataPath and write to SortedChunkDataPath, returns byte offset of every chunk
+	chunkByteOffset := s.sortChunks()
+
+	// merge sorted chunks to SortedDataPath
+	s.mergeSortedChunks(chunkByteOffset)
+
+	// load sorted columns and write each columns to separate files
+	s.separateColumns()
+}
+
+func (s Store) sortChunks() []int64 {
+	headerByte := utils.CountHeaderByte(s.DataPath)
+	reader := newReader(s.DataPath, int64(headerByte), -1, s.LimitedSlice)
 	writer := newWriter(s.SortedChunkDataPath, s.LimitedSlice)
 
 	chunkByteOffset := []int64{}
 	for {
-		chunkByteOffset = append(chunkByteOffset, reader.ByteOffset-111)
+		chunkByteOffset = append(chunkByteOffset, reader.ByteOffset-int64(headerByte))
 		readCnt := reader.readTo(0, s.LimitedSlice.GetLimit()-1)
 
-		s.LimitedSlice.Sort(0, readCnt-1, s.sortByMonth)
+		s.LimitedSlice.Sort(0, readCnt-1, func(i, j int) bool {
+			return s.LimitedSlice.Get(i).(Data).Month.Before(s.LimitedSlice.Get(j).(Data).Month)
+		})
 		writer.writeFrom(0, readCnt-1)
 
 		if readCnt == 0 {
 			break
 		}
 	}
+	return chunkByteOffset
+}
 
-	// merge sorted chunks to a single file
+func (s Store) mergeSortedChunks(chunkByteOffset []int64) {
 	readerIdx := []int{}
 	readers := []*Reader{}
 	numChunks := len(chunkByteOffset) - 1
@@ -47,7 +62,7 @@ func (s Store) InitColumnStore() {
 	}
 
 	writerIdx := numChunks * chunkDataSize
-	writer = newWriter(s.SortedDataPath, s.LimitedSlice)
+	writer := newWriter(s.SortedDataPath, s.LimitedSlice)
 
 	h := DataHeap{}
 	for i, r := range readers {
@@ -83,6 +98,6 @@ func (s Store) InitColumnStore() {
 	writer.writeFrom(numChunks*chunkDataSize, writerIdx-1)
 }
 
-func (s Store) sortByMonth(i, j int) bool {
-	return s.LimitedSlice.Get(i).(Data).Month.Before(s.LimitedSlice.Get(j).(Data).Month)
+func (s Store) separateColumns() {
+	
 }
