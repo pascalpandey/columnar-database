@@ -1,14 +1,17 @@
 package utils
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // month column
 var MonthToInt, IntToMonth = func() (map[string]int8, map[int8]string) {
 	startTime, _ := time.Parse("2006-01", "2014-01")
 	endTime, _ := time.Parse("2006-01", "2024-01")
 
-	monthToInt := make(map[string]int8)
-	intToMonth := make(map[int8]string)
+	monthToInt := map[string]int8{}
+	intToMonth := map[int8]string{}
 	idx := 0
 
 	for t := startTime; !t.After(endTime); t = t.AddDate(0, 1, 0) {
@@ -192,17 +195,17 @@ var IntToFlatModel = map[int8]string{
 }
 
 // lease_commence_date column
-var LeaseYearToInt, IntToLeaseYear = func() (map[int]int8, map[int8]int) {
+var LeaseCommenceToInt, IntToLeaseCommence = func() (map[string]int8, map[int8]string) {
 	startYear := 1966
 	endYear := 2022
 
-	yearToInt := make(map[int]int8)
-	intToYear := make(map[int8]int)
+	yearToInt := map[string]int8{}
+	intToYear := map[int8]string{}
 
 	idx := int8(0)
 	for year := startYear; year <= endYear; year++ {
-		yearToInt[year] = idx
-		intToYear[idx] = year
+		yearToInt[strconv.Itoa(year)] = idx
+		intToYear[idx] = strconv.Itoa(year)
 		idx++
 	}
 

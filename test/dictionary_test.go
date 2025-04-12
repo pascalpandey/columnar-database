@@ -31,12 +31,11 @@ func TestDictionaryMapping(t *testing.T) {
 
 		data := store.ParseRow(row)
 
-		monthStr := data.Month.Format("2006-01")
-		monthInt, ok := utils.MonthToInt[monthStr]
+		monthInt, ok := utils.MonthToInt[data.Month]
 		if !ok {
-			t.Errorf("Month %s not found in MonthToInt at row %d", monthStr, rowIndex)
+			t.Errorf("Month %s not found in MonthToInt at row %d", data.Month, rowIndex)
 		} else {
-			assert.Equal(t, monthStr, utils.IntToMonth[monthInt], "Month mismatch at row %d", rowIndex)
+			assert.Equal(t, data.Month, utils.IntToMonth[monthInt], "Month mismatch at row %d", rowIndex)
 		}
 
 		townInt, ok := utils.TownToInt[data.Town]
@@ -67,11 +66,11 @@ func TestDictionaryMapping(t *testing.T) {
 			assert.Equal(t, data.FlatModel, utils.IntToFlatModel[modelInt], "FlatModel mismatch at row %d", rowIndex)
 		}
 
-		leaseInt, ok := utils.LeaseYearToInt[data.LeaseCommence]
+		leaseInt, ok := utils.LeaseCommenceToInt[data.LeaseCommence]
 		if !ok {
-			t.Errorf("LeaseCommence %d not found in LeaseYearToInt at row %d", data.LeaseCommence, rowIndex)
+			t.Errorf("LeaseCommence %s not found in LeaseCommenceToInt at row %d", data.LeaseCommence, rowIndex)
 		} else {
-			assert.Equal(t, data.LeaseCommence, utils.IntToLeaseYear[leaseInt], "LeaseCommence mismatch at row %d", rowIndex)
+			assert.Equal(t, data.LeaseCommence, utils.IntToLeaseCommence[leaseInt], "LeaseCommence mismatch at row %d", rowIndex)
 		}
 	}
 }

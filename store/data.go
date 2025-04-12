@@ -2,12 +2,12 @@ package store
 
 import (
 	"fmt"
+	"sc4023/utils"
 	"strconv"
-	"time"
 )
 
 type Data struct {
-	Month         time.Time
+	Month         string
 	Town          string
 	FlatType      string
 	Block         string
@@ -15,7 +15,7 @@ type Data struct {
 	StoreyRange   string
 	FloorArea     float64
 	FlatModel     string
-	LeaseCommence int
+	LeaseCommence string
 	ResalePrice   float64
 }
 
@@ -25,21 +25,9 @@ func ParseRow(row []string) Data {
 		return Data{}
 	}
 
-	month, err := time.Parse("2006-01", row[0])
-	if err != nil {
-		fmt.Printf("invalid date format: %s\n", err)
-		return Data{}
-	}
-
 	floorArea, err := strconv.ParseFloat(row[6], 64)
 	if err != nil {
 		fmt.Printf("invalid floor area: %s\n", err)
-		return Data{}
-	}
-
-	lease, err := strconv.Atoi(row[8])
-	if err != nil {
-		fmt.Printf("invalid lease year: %s\n", err)
 		return Data{}
 	}
 
@@ -50,7 +38,7 @@ func ParseRow(row []string) Data {
 	}
 
 	data := Data{
-		Month:         month,
+		Month:         row[0],
 		Town:          row[1],
 		FlatType:      row[2],
 		Block:         row[3],
@@ -58,7 +46,7 @@ func ParseRow(row []string) Data {
 		StoreyRange:   row[5],
 		FloorArea:     floorArea,
 		FlatModel:     row[7],
-		LeaseCommence: lease,
+		LeaseCommence: row[8],
 		ResalePrice:   price,
 	}
 
@@ -78,7 +66,7 @@ func formatFloat(f float64) string {
 
 func (d Data) toRow() []string {
 	return []string{
-		d.Month.Format("2006-01"),
+		d.Month,
 		d.Town,
 		d.FlatType,
 		d.Block,
@@ -86,7 +74,22 @@ func (d Data) toRow() []string {
 		d.StoreyRange,
 		formatFloat(d.FloorArea),
 		d.FlatModel,
-		fmt.Sprintf("%d", d.LeaseCommence),
+		d.LeaseCommence,
 		formatFloat(d.ResalePrice),
+	}
+}
+
+func (d Data) toIndividualCols() []any {
+	return []any{
+		utils.MonthToInt[d.Month],
+		utils.TownToInt[d.Town],
+		utils.FlatTypeToInt[d.FlatType],
+		d.Block,
+		d.StreetName,
+		utils.StoreyRangeToInt[d.StoreyRange],
+		d.FloorArea,
+		utils.FlatModelToInt[d.FlatModel],
+		utils.LeaseCommenceToInt[d.LeaseCommence],
+		d.ResalePrice,
 	}
 }

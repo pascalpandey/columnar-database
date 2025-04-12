@@ -1,5 +1,7 @@
 package store
 
+import "sc4023/utils"
+
 type DataWithIdx struct {
 	Data Data
 	Idx  int
@@ -10,7 +12,7 @@ type DataHeap []DataWithIdx
 func (pq DataHeap) Len() int { return len(pq) }
 
 func (pq DataHeap) Less(i, j int) bool {
-	return pq[i].Data.Month.Before(pq[j].Data.Month)
+	return utils.MonthToInt[pq[i].Data.Month] < utils.MonthToInt[pq[j].Data.Month]
 }
 
 func (pq DataHeap) Swap(i, j int) {

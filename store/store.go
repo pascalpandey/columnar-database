@@ -2,6 +2,7 @@ package store
 
 import (
 	"container/heap"
+	"fmt"
 	"sc4023/limited_slice"
 	"sc4023/utils"
 )
@@ -22,12 +23,16 @@ func (s Store) InitColumnStore() {
 
 	// load sorted columns and write each columns to separate files
 	s.separateColumns()
+
+	// for all columns compress using run legth encoding
+	// for relevant columns (month, town, area, and price) compute indexes (zone map, bloom filter, and offset map)
+	s.compressAndComputeIndexes()
 }
 
 func (s Store) sortChunks() []int64 {
 	headerByte := utils.CountHeaderByte(s.DataPath)
 	reader := newReader(s.DataPath, int64(headerByte), -1, s.LimitedSlice)
-	writer := newWriter(s.SortedChunkDataPath, s.LimitedSlice)
+	writer := newWriter(s.SortedChunkDataPath, s.LimitedSlice, CSV)
 
 	chunkByteOffset := []int64{}
 	for {
@@ -35,7 +40,7 @@ func (s Store) sortChunks() []int64 {
 		readCnt := reader.readTo(0, s.LimitedSlice.GetLimit()-1)
 
 		s.LimitedSlice.Sort(0, readCnt-1, func(i, j int) bool {
-			return s.LimitedSlice.Get(i).(Data).Month.Before(s.LimitedSlice.Get(j).(Data).Month)
+			return utils.MonthToInt[s.LimitedSlice.Get(i).(Data).Month] < utils.MonthToInt[s.LimitedSlice.Get(j).(Data).Month]
 		})
 		writer.writeFrom(0, readCnt-1)
 
@@ -62,7 +67,7 @@ func (s Store) mergeSortedChunks(chunkByteOffset []int64) {
 	}
 
 	writerIdx := numChunks * chunkDataSize
-	writer := newWriter(s.SortedDataPath, s.LimitedSlice)
+	writer := newWriter(s.SortedDataPath, s.LimitedSlice, CSV)
 
 	h := DataHeap{}
 	for i, r := range readers {
@@ -99,5 +104,42 @@ func (s Store) mergeSortedChunks(chunkByteOffset []int64) {
 }
 
 func (s Store) separateColumns() {
+	cols := 10
+	columnNames := []string{"month", "town", "flat_type", "block", "street_name",
+		"storey_range", "floor_area_sqm", "flat_model", "lease_commence_date", "resale_price"}
+	writerIdx := []int{}
+	writers := []Writer{}
+	colDataSize := s.LimitedSlice.GetLimit() / (cols + 1)
+	for i := range cols {
+		writers = append(writers, newWriter(fmt.Sprintf("column_store/%s", columnNames[i]), s.LimitedSlice, Binary))
+		writerIdx = append(writerIdx, i*colDataSize)
+	}
+
+	readerIdx := cols * colDataSize
+	reader := newReader(s.SortedDataPath, 0, -1, s.LimitedSlice)
+	for {
+		dataCnt := reader.readTo(readerIdx, s.LimitedSlice.GetLimit()-1)
+		if dataCnt == 0 {
+			break
+		}
+		for i := readerIdx; i < readerIdx+dataCnt; i++ {
+			data := s.LimitedSlice.Get(i).(Data).toIndividualCols()
+			for col := 0; col < cols; col++ {
+				s.LimitedSlice.Set(writerIdx[col], data[col])
+				writerIdx[col] += 1
+				if writerIdx[col] == (col+1)*colDataSize {
+					writers[col].writeFrom(col*colDataSize, (col+1)*colDataSize-1)
+					writerIdx[col] = col * colDataSize
+				}
+			}
+		}
+	}
+	for col := 0; col < cols; col++ {
+		writers[col].writeFrom(col*colDataSize, writerIdx[col]-1)
+		writerIdx[col] = col * colDataSize
+	}
+}
+
+func (s Store) compressAndComputeIndexes() {
 	
 }
