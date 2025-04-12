@@ -1,4 +1,4 @@
-package limited_slice
+package custom
 
 import "sort"
 

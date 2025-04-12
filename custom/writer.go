@@ -1,4 +1,4 @@
-package store
+package custom
 
 import (
 	"bufio"
@@ -8,23 +8,23 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sc4023/limited_slice"
+	"sc4023/data"
 )
 
 type WriterType int
 
 const (
-	CSV WriterType = iota
-	Binary
+	ToCsv WriterType = iota
+	ToBinary
 )
 
 type Writer interface {
-	writeFrom(start int, end int)
+	WriteFrom(start int, end int)
 }
 
 type baseWriter struct {
 	file         *os.File
-	limitedSlice *limited_slice.LimitedSlice
+	limitedSlice *LimitedSlice
 }
 
 type CsvWriter struct {
@@ -37,7 +37,7 @@ type BinaryWriter struct {
 	writer *bufio.Writer
 }
 
-func newBaseWriter(filePath string, slice *limited_slice.LimitedSlice) (*baseWriter, error) {
+func newBaseWriter(filePath string, limitedSlice *LimitedSlice) (*baseWriter, error) {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
@@ -50,7 +50,7 @@ func newBaseWriter(filePath string, slice *limited_slice.LimitedSlice) (*baseWri
 
 	bw := &baseWriter{
 		file:         file,
-		limitedSlice: slice,
+		limitedSlice: limitedSlice,
 	}
 
 	runtime.SetFinalizer(bw, func(b *baseWriter) { b.file.Close() })
@@ -58,7 +58,7 @@ func newBaseWriter(filePath string, slice *limited_slice.LimitedSlice) (*baseWri
 	return bw, nil
 }
 
-func newWriter(filePath string, limitedSlice *limited_slice.LimitedSlice, writerType WriterType) Writer {
+func NewWriter(filePath string, limitedSlice *LimitedSlice, writerType WriterType) Writer {
 	bw, err := newBaseWriter(filePath, limitedSlice)
 	if err != nil {
 		return nil
@@ -66,13 +66,13 @@ func newWriter(filePath string, limitedSlice *limited_slice.LimitedSlice, writer
 
 	var writer Writer
 	switch writerType {
-	case CSV:
+	case ToCsv:
 		csvWriter := csv.NewWriter(bw.file)
 		writer = &CsvWriter{
 			baseWriter: bw,
 			writer:     csvWriter,
 		}
-	case Binary:
+	case ToBinary:
 		binaryWriter := bufio.NewWriter(bw.file)
 		writer = &BinaryWriter{
 			baseWriter: bw,
@@ -85,10 +85,10 @@ func newWriter(filePath string, limitedSlice *limited_slice.LimitedSlice, writer
 	return writer
 }
 
-func (w CsvWriter) writeFrom(start int, end int) {
+func (w CsvWriter) WriteFrom(start int, end int) {
 	for i := start; i <= end; i++ {
-		data := w.limitedSlice.Get(i).(Data)
-		if err := w.writer.Write(data.toRow()); err != nil {
+		csvData := w.limitedSlice.Get(i).(data.CsvData)
+		if err := w.writer.Write(csvData.ToRow()); err != nil {
 			fmt.Printf("failed to write data: %s\n", err)
 		}
 	}
@@ -99,7 +99,7 @@ func (w CsvWriter) writeFrom(start int, end int) {
 	}
 }
 
-func (w BinaryWriter) writeFrom(start int, end int) {
+func (w BinaryWriter) WriteFrom(start int, end int) {
 	for i := start; i <= end; i++ {
 		data := w.limitedSlice.Get(i)
 		switch d := data.(type) {

@@ -4,10 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sc4023/data"
 	"strconv"
 )
 
-func ParseFlags() (int, int, string, string) {
+func ParseFlags() (int8, int8, string) {
 	matric := flag.String("matric", "", "Matriculation number for data query")
 	rawData := flag.String("data", "", "File location of raw data")
 	flag.Parse()
@@ -23,30 +24,30 @@ func ParseFlags() (int, int, string, string) {
 		fmt.Println("Could not parse year")
 		os.Exit(1)
 	}
-	if year >= 4 && year <= 9 {
-		year += 2010
-	} else {
-		year += 2020
-	}
-
 	month, err := strconv.Atoi(string((*matric)[len(*matric)-3]))
 	if err != nil {
 		fmt.Println("Could not parse month")
 		os.Exit(1)
 	}
+	if year >= 4 && year <= 9 {
+		year += 2010
+	} else {
+		year += 2020
+	}
 	if month == 0 {
 		month = 10
 	}
+	monthInt := data.MonthToInt[fmt.Sprintf("%04d-%02d", year, month)]
 
 	townInt, err := strconv.Atoi(string((*matric)[len(*matric)-3]))
 	if err != nil {
 		fmt.Println("Could not parse town")
 		os.Exit(1)
 	}
-	town := IntToTown[int8(townInt)]
+	town := data.IntToTown[int8(townInt)]
 
 	fmt.Printf("Query:\n")
-	fmt.Printf("- Time range: %d-%02d to %d-%02d\n", year, month, year, month+1)
+	fmt.Printf("- Time range: %s to %s\n", data.IntToMonth[monthInt], data.IntToMonth[monthInt+1])
 	fmt.Printf("- Town: %s\n", town)
 	fmt.Printf("- Area: ≥ 80m²\n")
 
@@ -64,5 +65,5 @@ func ParseFlags() (int, int, string, string) {
 		os.Exit(1)
 	}
 
-	return year, month, town, *rawData
+	return monthInt, int8(townInt), *rawData
 }

@@ -1,12 +1,11 @@
-package store
+package data
 
 import (
 	"fmt"
-	"sc4023/utils"
 	"strconv"
 )
 
-type Data struct {
+type CsvData struct {
 	Month         string
 	Town          string
 	FlatType      string
@@ -19,25 +18,25 @@ type Data struct {
 	ResalePrice   float64
 }
 
-func ParseRow(row []string) Data {
+func ParseRow(row []string) CsvData {
 	if len(row) != 10 {
 		fmt.Printf("expected 10 columns per row, got %d\n", len(row))
-		return Data{}
+		return CsvData{}
 	}
 
 	floorArea, err := strconv.ParseFloat(row[6], 64)
 	if err != nil {
 		fmt.Printf("invalid floor area: %s\n", err)
-		return Data{}
+		return CsvData{}
 	}
 
 	price, err := strconv.ParseFloat(row[9], 64)
 	if err != nil {
 		fmt.Printf("invalid price: %s\n", err)
-		return Data{}
+		return CsvData{}
 	}
 
-	data := Data{
+	csvData := CsvData{
 		Month:         row[0],
 		Town:          row[1],
 		FlatType:      row[2],
@@ -50,7 +49,7 @@ func ParseRow(row []string) Data {
 		ResalePrice:   price,
 	}
 
-	return data
+	return csvData
 }
 
 func formatFloat(f float64) string {
@@ -64,7 +63,7 @@ func formatFloat(f float64) string {
 	return str
 }
 
-func (d Data) toRow() []string {
+func (d CsvData) ToRow() []string {
 	return []string{
 		d.Month,
 		d.Town,
@@ -79,17 +78,17 @@ func (d Data) toRow() []string {
 	}
 }
 
-func (d Data) toIndividualCols() []any {
+func (d CsvData) ToCols() []any {
 	return []any{
-		utils.MonthToInt[d.Month],
-		utils.TownToInt[d.Town],
-		utils.FlatTypeToInt[d.FlatType],
+		MonthToInt[d.Month],
+		TownToInt[d.Town],
+		FlatTypeToInt[d.FlatType],
 		d.Block,
 		d.StreetName,
-		utils.StoreyRangeToInt[d.StoreyRange],
+		StoreyRangeToInt[d.StoreyRange],
 		d.FloorArea,
-		utils.FlatModelToInt[d.FlatModel],
-		utils.LeaseCommenceToInt[d.LeaseCommence],
+		FlatModelToInt[d.FlatModel],
+		LeaseCommenceToInt[d.LeaseCommence],
 		d.ResalePrice,
 	}
 }

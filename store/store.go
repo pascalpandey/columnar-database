@@ -3,12 +3,13 @@ package store
 import (
 	"container/heap"
 	"fmt"
-	"sc4023/limited_slice"
+	"sc4023/custom"
+	"sc4023/data"
 	"sc4023/utils"
 )
 
 type Store struct {
-	LimitedSlice        *limited_slice.LimitedSlice
+	LimitedSlice        *custom.LimitedSlice
 	DataPath            string
 	SortedChunkDataPath string
 	SortedDataPath      string
@@ -25,24 +26,24 @@ func (s Store) InitColumnStore() {
 	s.separateColumns()
 
 	// for all columns compress using run legth encoding
-	// for relevant columns (month, town, area, and price) compute indexes (zone map, bloom filter, and offset map)
+	// for relevant columns compute indexes (zone map, bit map, and/or offset map)
 	s.compressAndComputeIndexes()
 }
 
 func (s Store) sortChunks() []int64 {
 	headerByte := utils.CountHeaderByte(s.DataPath)
-	reader := newReader(s.DataPath, int64(headerByte), -1, s.LimitedSlice)
-	writer := newWriter(s.SortedChunkDataPath, s.LimitedSlice, CSV)
+	reader := custom.NewReader(s.DataPath, int64(headerByte), -1, s.LimitedSlice, custom.FromCsv)
+	writer := custom.NewWriter(s.SortedChunkDataPath, s.LimitedSlice, custom.ToCsv)
 
 	chunkByteOffset := []int64{}
 	for {
-		chunkByteOffset = append(chunkByteOffset, reader.ByteOffset-int64(headerByte))
-		readCnt := reader.readTo(0, s.LimitedSlice.GetLimit()-1)
+		chunkByteOffset = append(chunkByteOffset, reader.GetByteOffset()-int64(headerByte))
+		readCnt := reader.ReadTo(0, s.LimitedSlice.GetLimit()-1)
 
 		s.LimitedSlice.Sort(0, readCnt-1, func(i, j int) bool {
-			return utils.MonthToInt[s.LimitedSlice.Get(i).(Data).Month] < utils.MonthToInt[s.LimitedSlice.Get(j).(Data).Month]
+			return data.MonthToInt[s.LimitedSlice.Get(i).(data.CsvData).Month] < data.MonthToInt[s.LimitedSlice.Get(j).(data.CsvData).Month]
 		})
-		writer.writeFrom(0, readCnt-1)
+		writer.WriteFrom(0, readCnt-1)
 
 		if readCnt == 0 {
 			break
@@ -53,93 +54,107 @@ func (s Store) sortChunks() []int64 {
 
 func (s Store) mergeSortedChunks(chunkByteOffset []int64) {
 	readerIdx := []int{}
-	readers := []*Reader{}
+	readers := []custom.Reader{}
 	numChunks := len(chunkByteOffset) - 1
 	readerDataLeft := make([]int, numChunks)
 	chunkDataSize := s.LimitedSlice.GetLimit() / (numChunks + 1)
 	for i := range numChunks {
 		readerIdx = append(readerIdx, i*chunkDataSize)
 		if i == numChunks-1 {
-			readers = append(readers, newReader(s.SortedChunkDataPath, chunkByteOffset[i], -1, s.LimitedSlice))
+			readers = append(readers, custom.NewReader(s.SortedChunkDataPath, chunkByteOffset[i], -1, s.LimitedSlice, custom.FromCsv))
 		} else {
-			readers = append(readers, newReader(s.SortedChunkDataPath, chunkByteOffset[i], chunkByteOffset[i+1], s.LimitedSlice))
+			readers = append(readers, custom.NewReader(s.SortedChunkDataPath, chunkByteOffset[i], chunkByteOffset[i+1], s.LimitedSlice, custom.FromCsv))
 		}
 	}
 
 	writerIdx := numChunks * chunkDataSize
-	writer := newWriter(s.SortedDataPath, s.LimitedSlice, CSV)
+	writer := custom.NewWriter(s.SortedDataPath, s.LimitedSlice, custom.ToCsv)
 
 	h := DataHeap{}
 	for i, r := range readers {
-		readCnt := r.readTo(readerIdx[i], readerIdx[i]+chunkDataSize-1)
+		readCnt := r.ReadTo(readerIdx[i], readerIdx[i]+chunkDataSize-1)
 		readerDataLeft[i] = readCnt - 1
-		h = append(h, DataWithIdx{Data: s.LimitedSlice.Get(readerIdx[i]).(Data), Idx: i})
+		h = append(h, CsvDataWithIdx{Data: s.LimitedSlice.Get(readerIdx[i]).(data.CsvData), Idx: i})
 	}
 
 	heap.Init(&h)
 	for len(h) > 0 {
-		item := heap.Pop(&h).(DataWithIdx)
+		item := heap.Pop(&h).(CsvDataWithIdx)
 		i := item.Idx
-		data := item.Data
+		csvData := item.Data
 
 		readerIdx[i] += 1
 		if readerIdx[i] == (i+1)*chunkDataSize {
 			readerIdx[i] = i * chunkDataSize
-			readCnt := readers[i].readTo(readerIdx[i], readerIdx[i]+chunkDataSize-1)
+			readCnt := readers[i].ReadTo(readerIdx[i], readerIdx[i]+chunkDataSize-1)
 			readerDataLeft[i] = readCnt
 		}
 		if readerDataLeft[i] > 0 {
-			heap.Push(&h, DataWithIdx{Data: s.LimitedSlice.Get(readerIdx[i]).(Data), Idx: i})
+			heap.Push(&h, CsvDataWithIdx{Data: s.LimitedSlice.Get(readerIdx[i]).(data.CsvData), Idx: i})
 			readerDataLeft[i] -= 1
 		}
 
-		s.LimitedSlice.Set(writerIdx, data)
+		s.LimitedSlice.Set(writerIdx, csvData)
 		writerIdx += 1
 		if writerIdx == s.LimitedSlice.GetLimit() {
-			writer.writeFrom(numChunks*chunkDataSize, s.LimitedSlice.GetLimit()-1)
+			writer.WriteFrom(numChunks*chunkDataSize, s.LimitedSlice.GetLimit()-1)
 			writerIdx = numChunks * chunkDataSize
 		}
 	}
-	writer.writeFrom(numChunks*chunkDataSize, writerIdx-1)
+	writer.WriteFrom(numChunks*chunkDataSize, writerIdx-1)
 }
 
 func (s Store) separateColumns() {
 	cols := 10
-	columnNames := []string{"month", "town", "flat_type", "block", "street_name",
-		"storey_range", "floor_area_sqm", "flat_model", "lease_commence_date", "resale_price"}
 	writerIdx := []int{}
-	writers := []Writer{}
+	writers := []custom.Writer{}
 	colDataSize := s.LimitedSlice.GetLimit() / (cols + 1)
 	for i := range cols {
-		writers = append(writers, newWriter(fmt.Sprintf("column_store/%s", columnNames[i]), s.LimitedSlice, Binary))
+		writers = append(writers, custom.NewWriter(fmt.Sprintf("column_store/%s", data.ColumnMetadata[i].Name), s.LimitedSlice, custom.ToBinary))
 		writerIdx = append(writerIdx, i*colDataSize)
 	}
 
 	readerIdx := cols * colDataSize
-	reader := newReader(s.SortedDataPath, 0, -1, s.LimitedSlice)
+	reader := custom.NewReader(s.SortedDataPath, 0, -1, s.LimitedSlice, custom.FromCsv)
 	for {
-		dataCnt := reader.readTo(readerIdx, s.LimitedSlice.GetLimit()-1)
+		dataCnt := reader.ReadTo(readerIdx, s.LimitedSlice.GetLimit()-1)
 		if dataCnt == 0 {
 			break
 		}
 		for i := readerIdx; i < readerIdx+dataCnt; i++ {
-			data := s.LimitedSlice.Get(i).(Data).toIndividualCols()
+			dataCols := s.LimitedSlice.Get(i).(data.CsvData).ToCols()
 			for col := 0; col < cols; col++ {
-				s.LimitedSlice.Set(writerIdx[col], data[col])
+				s.LimitedSlice.Set(writerIdx[col], dataCols[col])
 				writerIdx[col] += 1
 				if writerIdx[col] == (col+1)*colDataSize {
-					writers[col].writeFrom(col*colDataSize, (col+1)*colDataSize-1)
+					writers[col].WriteFrom(col*colDataSize, (col+1)*colDataSize-1)
 					writerIdx[col] = col * colDataSize
 				}
 			}
 		}
 	}
 	for col := 0; col < cols; col++ {
-		writers[col].writeFrom(col*colDataSize, writerIdx[col]-1)
+		writers[col].WriteFrom(col*colDataSize, writerIdx[col]-1)
 		writerIdx[col] = col * colDataSize
 	}
 }
 
 func (s Store) compressAndComputeIndexes() {
-	
+	for _, metadata := range data.ColumnMetadata {
+		var reader custom.Reader
+		switch metadata.Type.(type) {
+		case int8:
+			reader = custom.NewReader(fmt.Sprintf("column_store/processed_%s", metadata.Name), 0, -1, s.LimitedSlice, custom.FromBinaryInt8)
+		case float64:
+			reader = custom.NewReader(fmt.Sprintf("column_store/processed_%s", metadata.Name), 0, -1, s.LimitedSlice, custom.FromBinaryFloat64)
+		case string:
+			reader = custom.NewReader(fmt.Sprintf("column_store/processed_%s", metadata.Name), 0, -1, s.LimitedSlice, custom.FromBinaryString)
+		default:
+			fmt.Println("unsupported column type")
+			continue
+		}
+		reader.ReadTo(0, s.LimitedSlice.GetLimit()-1)
+		break
+	}
+
 }

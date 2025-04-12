@@ -3,8 +3,7 @@ package test
 import (
 	"encoding/csv"
 	"os"
-	"sc4023/store"
-	"sc4023/utils"
+	"sc4023/data"
 	"testing"
 )
 
@@ -26,10 +25,10 @@ func TestFileSortedByMonth(t *testing.T) {
 			break
 		}
 
-		data := store.ParseRow(row)
-		currentDate := data.Month
+		csvData := data.ParseRow(row)
+		currentDate := csvData.Month
 
-		if prevDate != "" && utils.MonthToInt[currentDate] < utils.MonthToInt[prevDate] {
+		if prevDate != "" && data.MonthToInt[currentDate] < data.MonthToInt[prevDate] {
 			t.Errorf("Error: Date is not sorted at row %d. Previous: %s, Current: %s\n",
 				act+1, prevDate, currentDate)
 		}

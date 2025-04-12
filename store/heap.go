@@ -1,18 +1,18 @@
 package store
 
-import "sc4023/utils"
+import "sc4023/data"
 
-type DataWithIdx struct {
-	Data Data
+type CsvDataWithIdx struct {
+	Data data.CsvData
 	Idx  int
 }
 
-type DataHeap []DataWithIdx
+type DataHeap []CsvDataWithIdx
 
 func (pq DataHeap) Len() int { return len(pq) }
 
 func (pq DataHeap) Less(i, j int) bool {
-	return utils.MonthToInt[pq[i].Data.Month] < utils.MonthToInt[pq[j].Data.Month]
+	return data.MonthToInt[pq[i].Data.Month] < data.MonthToInt[pq[j].Data.Month]
 }
 
 func (pq DataHeap) Swap(i, j int) {
@@ -20,7 +20,7 @@ func (pq DataHeap) Swap(i, j int) {
 }
 
 func (pq *DataHeap) Push(v any) {
-	item := v.(DataWithIdx)
+	item := v.(CsvDataWithIdx)
 	*pq = append(*pq, item)
 }
 
