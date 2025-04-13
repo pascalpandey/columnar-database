@@ -206,7 +206,7 @@ var LeaseCommenceToInt, IntToLeaseCommence = func() (map[string]int8, map[int8]s
 	for year := startYear; year <= endYear; year++ {
 		yearToInt[strconv.Itoa(year)] = idx
 		intToYear[idx] = strconv.Itoa(year)
-		idx++
+		idx += 1
 	}
 
 	return yearToInt, intToYear
