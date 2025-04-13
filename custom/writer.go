@@ -24,7 +24,7 @@ type Writer interface {
 
 type baseWriter struct {
 	file         *os.File
-	limitedSlice *LimitedSlice
+	limitedSlice LimitedSlice
 }
 
 type CsvWriter struct {
@@ -37,7 +37,7 @@ type BinaryWriter struct {
 	writer *bufio.Writer
 }
 
-func newBaseWriter(filePath string, limitedSlice *LimitedSlice) (*baseWriter, error) {
+func newBaseWriter(filePath string, limitedSlice LimitedSlice) (*baseWriter, error) {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
@@ -58,7 +58,7 @@ func newBaseWriter(filePath string, limitedSlice *LimitedSlice) (*baseWriter, er
 	return bw, nil
 }
 
-func NewWriter(filePath string, limitedSlice *LimitedSlice, writerType WriterType) Writer {
+func NewWriter(filePath string, limitedSlice LimitedSlice, writerType WriterType) Writer {
 	bw, err := newBaseWriter(filePath, limitedSlice)
 	if err != nil {
 		return nil
@@ -117,7 +117,7 @@ func (w BinaryWriter) WriteFrom(start int, end int) {
 				fmt.Printf("failed to write string at %d: %v\n", i, err)
 			}
 		default:
-			fmt.Printf("unsupported type at index %d: %T\n", i, d)
+			fmt.Printf("WriteFrom: unsupported type at index %d: %T, %v\n", i, d, data)
 		}
 	}
 

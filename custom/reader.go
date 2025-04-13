@@ -29,7 +29,7 @@ type baseReader struct {
 	file         *os.File
 	byteLimit    int64
 	byteOffset   int64
-	limitedSlice *LimitedSlice
+	limitedSlice LimitedSlice
 }
 
 type CsvReader struct {
@@ -42,7 +42,7 @@ type BinaryReader[T string | float64 | int8] struct {
 	reader *bufio.Reader
 }
 
-func newBaseReader(filePath string, offset int64, limit int64, limitedSlice *LimitedSlice) (*baseReader, error) {
+func newBaseReader(filePath string, offset int64, limit int64, limitedSlice LimitedSlice) (*baseReader, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Printf("failed to open file: %s\n", err)
@@ -67,7 +67,7 @@ func newBaseReader(filePath string, offset int64, limit int64, limitedSlice *Lim
 	return br, nil
 }
 
-func NewReader(filePath string, offset int64, limit int64, limitedSlice *LimitedSlice, readerType ReaderType) Reader {
+func NewReader(filePath string, offset int64, limit int64, limitedSlice LimitedSlice, readerType ReaderType) Reader {
 	br, err := newBaseReader(filePath, offset, limit, limitedSlice)
 	if err != nil {
 		return nil
@@ -140,16 +140,19 @@ func (r *BinaryReader[T]) ReadTo(start int, end int) int {
 			val = int8(b)
 			r.byteOffset += 1
 		case float64:
-			var val float64
-			err = binary.Read(r.reader, binary.LittleEndian, &val)
+			var f float64
+			err = binary.Read(r.reader, binary.LittleEndian, &f)
+			val = f
 			r.byteOffset += 8
 		case string:
 			var strBytes []byte
 			strBytes, err = r.reader.ReadBytes('\n')
-			val = string(strBytes[:len(strBytes)-1])
-			r.byteOffset += int64(len(strBytes) + 1)
+			if err == nil {
+				val = string(strBytes[:len(strBytes)-1])
+				r.byteOffset += int64(len(strBytes) + 1)
+			}
 		default:
-			fmt.Printf("unsupported type at index %d\n", i)
+			fmt.Printf("ReadTo: unsupported type at index %d\n", i)
 			continue
 		}
 

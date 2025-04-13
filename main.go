@@ -2,6 +2,7 @@ package main
 
 import (
 	"sc4023/custom"
+	"sc4023/data"
 	"sc4023/store"
 	"sc4023/utils"
 )
@@ -15,11 +16,13 @@ func main() {
 
 	sortedChunkDataPath := "./column_store/sorted_chunk.csv"
 	sortedDataPath := "./column_store/sorted.csv"
+	columnStoreMetadata := data.InitColumnStoreMetadata()
 	store := store.Store{
 		LimitedSlice:        limitedSlice,
 		DataPath:            dataPath,
 		SortedChunkDataPath: sortedChunkDataPath,
 		SortedDataPath:      sortedDataPath,
+		ColumnStoreMetadata: columnStoreMetadata,
 	}
 	store.InitColumnStore()
 }

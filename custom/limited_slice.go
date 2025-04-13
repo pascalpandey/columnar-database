@@ -7,8 +7,8 @@ type LimitedSlice struct {
 	limit int
 }
 
-func InitLimitedSlice(limit int) *LimitedSlice {
-	return &LimitedSlice{
+func InitLimitedSlice(limit int) LimitedSlice {
+	return LimitedSlice{
 		data:  make([]any, limit),
 		limit: limit,
 	}
