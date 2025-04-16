@@ -8,6 +8,7 @@ import (
 	"strconv"
 )
 
+// parse matric to query and raw data path
 func ParseFlags() (int8, int8, float64, string, string) {
 	matric := flag.String("matric", "", "Matriculation number for data query")
 	rawData := flag.String("data", "", "File location of raw data")

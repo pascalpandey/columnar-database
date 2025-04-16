@@ -18,22 +18,23 @@ type CsvData struct {
 	ResalePrice   float64
 }
 
-func ParseRow(row []string) CsvData {
+// deserialize csv row to Go types, returns error on malformed data and ignores the row on subsequent processing
+func ParseRow(row []string, rowNumber int) (CsvData, error) {
 	if len(row) != 10 {
-		fmt.Printf("expected 10 columns per row, got %d\n", len(row))
-		return CsvData{}
+		fmt.Printf("expected 10 columns per row, got %d in row %d, ignoring row...\n", len(row), rowNumber)
+		return CsvData{}, fmt.Errorf("expected 10 columns per row")
 	}
 
 	floorArea, err := strconv.ParseFloat(row[6], 64)
-	if err != nil {
-		fmt.Printf("invalid floor area: %s\n", err)
-		return CsvData{}
+	if err != nil || floorArea < 0 {
+		fmt.Printf("invalid floor area in row %d, ignoring row...\n", rowNumber)
+		return CsvData{}, fmt.Errorf("invalid floor area")
 	}
 
 	price, err := strconv.ParseFloat(row[9], 64)
-	if err != nil {
-		fmt.Printf("invalid price: %s\n", err)
-		return CsvData{}
+	if err != nil || price < 0 {
+		fmt.Printf("invalid price in row %d, ignoring row...\n", rowNumber)
+		return CsvData{}, fmt.Errorf("invalid floor price")
 	}
 
 	csvData := CsvData{
@@ -49,9 +50,11 @@ func ParseRow(row []string) CsvData {
 		ResalePrice:   price,
 	}
 
-	return csvData
+	return csvData, nil
 }
 
+// format float to the original length in raw data, ensures that byte offsets
+// of reader of sorted_chunk.csv is the same as that of raw data
 func formatFloat(f float64) string {
 	str := fmt.Sprintf("%.2f", f)
 	if str[len(str)-2] == '0' {
@@ -63,6 +66,7 @@ func formatFloat(f float64) string {
 	return str
 }
 
+// to string array for writing to another csv file
 func (d CsvData) ToRow() []string {
 	return []string{
 		d.Month,
@@ -78,6 +82,7 @@ func (d CsvData) ToRow() []string {
 	}
 }
 
+// to individual column data types
 func (d CsvData) ToCols() []any {
 	return []any{
 		MonthToInt[d.Month],

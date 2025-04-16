@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// used to clean column_store directory on each run
 func CleanDir(dir string) error {
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -24,6 +25,7 @@ func CleanDir(dir string) error {
 	return err
 }
 
+// count byte width of csv header files, used in column store initialization
 func CountHeaderByte(filePath string) int {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -40,6 +42,7 @@ func CountHeaderByte(filePath string) int {
 	return len(line)
 }
 
+// save final results to a file
 func SaveResults(matric string, month int8, town int8, area float64, results []float64) {
 	filePath := fmt.Sprintf("results/ScanResult_%s.csv", matric)
 	dir := filepath.Dir(filePath)
@@ -48,7 +51,7 @@ func SaveResults(matric string, month int8, town int8, area float64, results []f
 		return
 	}
 
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		fmt.Printf("failed to open file %s: %s\n", filePath, err)
 		return

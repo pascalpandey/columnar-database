@@ -2,6 +2,7 @@ package data
 
 type Bitmap []bool
 
+// check if a block can be skipped (not loaded to memory) and if the block or part of it qualifies for further filtering
 func (bm Bitmap) Check(matchVal int8) (skippable bool, qualified bool) {
 	if bm[matchVal] {
 		for i, otherValExists := range bm {

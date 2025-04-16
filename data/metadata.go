@@ -5,17 +5,18 @@ import "math"
 type Metadatas []*Metadata
 
 type Metadata struct {
-	Name                string
-	Type                any
-	DataSizeByte        int64
-	Sorted              bool
-	RunLengthEncode     bool
-	ZoneMapIndexInt8    []ZoneMap[int8]
-	ZoneMapIndexFloat64 []ZoneMap[float64]
-	BitMapIndex         []Bitmap
-	OffsetMapIndex      []int64
+	Name                string             // name of column
+	Type                any                // data type
+	DataSizeByte        int64              // size of data type in bytes
+	Sorted              bool               // whether or not col is sorted
+	RunLengthEncode     bool               // whether or not col is run length encoded
+	ZoneMapIndexInt8    []ZoneMap[int8]    // zone map for int8 cols
+	ZoneMapIndexFloat64 []ZoneMap[float64] // zone map for float64 cols
+	BitMapIndex         []Bitmap           // bit map for exact queries
+	OffsetMapIndex      []int64            // byte offsets of each data block
 }
 
+// init column store metadata to be used by main Store and QueryRunner structs
 func InitColumnStoreMetadata() Metadatas {
 	return Metadatas{
 		{
@@ -88,6 +89,7 @@ func InitColumnStoreMetadata() Metadatas {
 	}
 }
 
+// create indexes for new data block
 func (m *Metadata) InitBlockIndexes(blockSize int64) {
 	if m.ZoneMapIndexInt8 != nil {
 		m.ZoneMapIndexInt8 = append(m.ZoneMapIndexInt8, ZoneMap[int8]{Min: math.MaxInt8})
@@ -100,10 +102,11 @@ func (m *Metadata) InitBlockIndexes(blockSize int64) {
 		m.BitMapIndex = append(m.BitMapIndex, bitMap)
 	}
 	if m.OffsetMapIndex != nil {
-		m.OffsetMapIndex = append(m.OffsetMapIndex, blockSize * m.DataSizeByte)
+		m.OffsetMapIndex = append(m.OffsetMapIndex, blockSize*m.DataSizeByte)
 	}
 }
 
+// update latest block indexes
 func (m *Metadata) UpdateBlockIndexes(val any) {
 	if m.ZoneMapIndexInt8 != nil {
 		v := val.(int8)
@@ -122,6 +125,7 @@ func (m *Metadata) UpdateBlockIndexes(val any) {
 	}
 }
 
+// get metadata based on column name
 func (ms Metadatas) GetColMetadata(name string) *Metadata {
 	for _, metadata := range ms {
 		if metadata.Name == name {

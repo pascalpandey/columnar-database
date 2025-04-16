@@ -17,6 +17,7 @@ func main() {
 	// Simulate big data environment by only allowing loading of 2000 data points at any time
 	limitedSlice := custom.InitLimitedSlice(2000)
 
+	// initialize column store
 	sortedChunkDataPath := "./column_store/sorted_chunk.csv"
 	sortedDataPath := "./column_store/sorted.csv"
 	columnStoreMetadata := data.InitColumnStoreMetadata()
@@ -29,6 +30,7 @@ func main() {
 	}
 	store.InitColumnStore()
 
+	// run query based on the matric number
 	start := time.Now()
 	runner := query.QueryRunner{
 		LimitedSlice:        limitedSlice,
@@ -41,5 +43,6 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("Query execution time (excluding column store init): %s\n", elapsed)
 
+	// save results to file
 	utils.SaveResults(matric, month, town, area, results)
 }

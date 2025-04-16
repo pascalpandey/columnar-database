@@ -9,6 +9,7 @@ import (
 	"sc4023/data"
 )
 
+// tests that all dtaa are represented in the dictionary and that maping through the dictionary and back leads to the same value
 func TestDictionaryMapping(t *testing.T) {
 	file, err := os.Open("../ResalePricesSingapore.csv")
 	if err != nil {
@@ -28,7 +29,7 @@ func TestDictionaryMapping(t *testing.T) {
 		}
 		rowIndex++
 
-		csvData := data.ParseRow(row)
+		csvData, _ := data.ParseRow(row, rowIndex)
 
 		monthInt, ok := data.MonthToInt[csvData.Month]
 		if !ok {

@@ -11,15 +11,17 @@ import (
 )
 
 type QueryRunner struct {
-	LimitedSlice        custom.LimitedSlice
-	ColumnStoreMetadata data.Metadatas
-	QueryPlan           []any
-	QualifiedBlocks     []int
-	TaskQueue           chan int
-	wg                  sync.WaitGroup
+	LimitedSlice        custom.LimitedSlice // limited slice where queries are run
+	ColumnStoreMetadata data.Metadatas      // metadata of each column
+	QueryPlan           []any               // query plan to be executed by each worker
+	QualifiedBlocks     []int               // qualified blocks from initial filtering on the sorted month column
+	TaskQueue           chan int            // channel for distributing tasks between workers
+	wg                  sync.WaitGroup      // wait group to wait until all workers finish execution
 }
 
+// initialize the query plan, this will be run by each worker which processes each qualified block absed on this plan
 func (q *QueryRunner) InitQueryPlan(month int8, town int8, area float64) {
+	// intialize plan and filters
 	plan := []any{}
 	filters := []Filter{}
 	filterMonth := RangeFilterQuery[int8]{
@@ -68,30 +70,38 @@ func (q *QueryRunner) InitQueryPlan(month int8, town int8, area float64) {
 	q.QueryPlan = plan
 }
 
+// entrypoint of running the query, divides limited slice into 4 workspaces of 500 elements each
+// each worker will run on this workspace and processes each block independently, each worker uses
+// the first 250 elements as read space to load data and the next 250 elements as write space
+// to store filter or load results
 func (q *QueryRunner) RunQuery() []float64 {
+	// start workers
 	workerSpaceSize := 500
 	for i := 0; i < 4; i++ {
 		q.wg.Add(1)
 		go q.startWorker(i*workerSpaceSize, workerSpaceSize)
 	}
 
+	// distribute tasks into the channel
 	for _, block := range q.QualifiedBlocks {
 		q.TaskQueue <- block
 	}
 
+	// close the channel and wait until all workers are done
 	close(q.TaskQueue)
-
 	q.wg.Wait()
 
 	return q.formatResults()
 }
 
+// starts a worker, it consumes qualified blocks from the channel and processes it
 func (q *QueryRunner) startWorker(workerIdx int, workerSpace int) {
 	defer q.wg.Done()
 	for blockIdx := range q.TaskQueue {
 		firstFilter := true
-		q.LimitedSlice.Reset(workerIdx, workerIdx+workerSpace-1)
+		q.LimitedSlice.Reset(workerIdx, workerIdx+workerSpace-1) // reset worker space in case of leftover queries from previous blocks
 		for _, query := range q.QueryPlan {
+			// run appropriate process depending on the query type
 			var done bool
 			switch query := query.(type) {
 			case *RangeFilterQuery[int8], *RangeFilterQuery[float64], *ExactFilterQuery:
@@ -109,13 +119,18 @@ func (q *QueryRunner) startWorker(workerIdx int, workerSpace int) {
 	}
 }
 
+// perform filtering, first laod data into the read space and write booleans into the write space, treating the write space
+// as a bit map for inidcating whether index of data in the data block qualifies or not, data bocks are 250 wide so its 
+// guaranteed to fit in the read space
 func (q *QueryRunner) handleFilter(isFirstFilter bool, query any, blockIdx, workerIdx, workerSpace int) bool {
+	// split the 500 element workerSpace into read and write space of 250 elements each
 	readStart := workerIdx
 	readEnd := workerIdx + workerSpace/2 - 1
 	writeStart := readEnd + 1
 	writeEnd := writeStart + workerSpace/2 - 1
 	rwSpace := workerSpace / 2
 
+	// init reader appropriately based on query column type and store results of index checks to handle afterwards
 	var skippable, qualified bool
 	var reader custom.Reader
 	var limitByte int64
@@ -152,7 +167,7 @@ func (q *QueryRunner) handleFilter(isFirstFilter bool, query any, blockIdx, work
 		reader = custom.NewReader(filePath, offsetByte, limitByte, q.LimitedSlice, custom.FromBinaryInt8)
 	}
 
-	// check indexes
+	// check indexes using the previously stored results
 	if skippable {
 		if qualified {
 			// if qualified and not the first filter continue with previous valid rows
@@ -173,16 +188,18 @@ func (q *QueryRunner) handleFilter(isFirstFilter bool, query any, blockIdx, work
 	// index unable to determine valid rows, so we load data and filter manually
 	hasValidRows := false
 	readCnt := reader.ReadTo(readStart, readEnd)
-	prevRunLen := 0
+	prevRunLen := 0 // helps to write to the write index at the write space
 	for i := readStart; i < readStart+readCnt; i++ {
 		val := q.LimitedSlice.Get(i)
+		// check if its an RLE run, and handle appropriately
 		if length, isRun := utils.CheckRunLength(val); isRun {
 			runVal := q.LimitedSlice.Get(i + 1)
 			for j := range length {
+				// if qualified and previous row also qualifies or is the first filter set the row bit map to true
 				if evaluateFilter(query, runVal) && (isFirstFilter || q.LimitedSlice.Get(i+rwSpace+prevRunLen+j) != nil) {
 					q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, true)
 					hasValidRows = true
-				} else {
+				} else { // unqualified row, so reset the index
 					q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, nil)
 				}
 			}
@@ -190,6 +207,8 @@ func (q *QueryRunner) handleFilter(isFirstFilter bool, query any, blockIdx, work
 			i += 1
 			continue
 		}
+
+		// not an RLE run so continue as normal
 		if evaluateFilter(query, val) && (isFirstFilter || q.LimitedSlice.Get(i+prevRunLen+rwSpace) != nil) {
 			q.LimitedSlice.Set(i+prevRunLen+rwSpace, true)
 			hasValidRows = true
@@ -201,6 +220,8 @@ func (q *QueryRunner) handleFilter(isFirstFilter bool, query any, blockIdx, work
 	return !hasValidRows
 }
 
+// handle shared scans, which are aggregate queries, there are 2 types aggregates on a column and on existing data
+// for aggregates on a column, first laod the data from disk, otherwise directly read the existing data and compute results
 func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerIdx, workerSpace int) bool {
 	readStart := workerIdx
 	readEnd := workerIdx + workerSpace/2 - 1
@@ -210,9 +231,9 @@ func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerId
 
 	// if aggregate query is on a specific column load the data and decode with RLE first, in cases like minimum
 	// price per area where the query is after an operation, perform the aggregate directly without loading any data
-	var readCnt int
 	query := sharedScan[0].(*MinQuery)
 	if query.Column != nil {
+		// intiialize reader
 		filePath := fmt.Sprintf("column_store/rle_%s", query.Column.Name)
 		offsetByte := query.Column.OffsetMapIndex[blockIdx]
 		var limitByte int64
@@ -222,12 +243,16 @@ func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerId
 			limitByte = -1
 		}
 		reader := custom.NewReader(filePath, offsetByte, limitByte, q.LimitedSlice, custom.FromBinaryFloat64)
-		readCnt = reader.ReadTo(readStart, readEnd)
+		readCnt := reader.ReadTo(readStart, readEnd)
 
+		// perform run length decoding and write valid data to the write space, only write to indexes
+		// which are valid, i.e. data is non null, this is to make sure that we only laod data rows which
+		// are valid after filtering, which maye be done in previous steps
 		prevRunLen := 0
 		for i := readStart; i < readStart+readCnt; i++ {
 			val := q.LimitedSlice.Get(i)
-			if length, isRun := utils.CheckRunLength(val); isRun { 
+			// check if its an RLE run, and handle appropriately
+			if length, isRun := utils.CheckRunLength(val); isRun {
 				runVal := q.LimitedSlice.Get(i + 1)
 				for j := range length {
 					if q.LimitedSlice.Get(i+rwSpace+prevRunLen+j) != nil {
@@ -238,13 +263,16 @@ func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerId
 				i += 1
 				continue
 			}
+
+			// not RLE run so continue normally
 			if q.LimitedSlice.Get(i+prevRunLen+rwSpace) != nil {
 				q.LimitedSlice.Set(i+prevRunLen+rwSpace, val)
 			}
 		}
-	} 
+	}
 
-	for i := writeStart; i<writeEnd; i++ {
+	// perform shared scan on the valid loaded data
+	for i := writeStart; i < writeEnd; i++ {
 		val := q.LimitedSlice.Get(i)
 		if val != nil {
 			for _, scan := range sharedScan {
@@ -256,12 +284,14 @@ func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerId
 	return false
 }
 
+// perform designated operation on the current worker space, first load data form the other column then perform
+// operations on the currently stored data in the write space
 func (q *QueryRunner) handleOperation(operation *Operation, blockIdx, workerIdx, workerSpace int) bool {
 	readStart := workerIdx
 	readEnd := workerIdx + workerSpace/2 - 1
 	rwSpace := workerSpace / 2
 
-	// assume shared scan is always on the same column
+	// initialize reader
 	filePath := fmt.Sprintf("column_store/rle_%s", operation.Column.Name)
 	offsetByte := operation.Column.OffsetMapIndex[blockIdx]
 	var limitByte int64
@@ -272,50 +302,37 @@ func (q *QueryRunner) handleOperation(operation *Operation, blockIdx, workerIdx,
 	}
 	reader := custom.NewReader(filePath, offsetByte, limitByte, q.LimitedSlice, custom.FromBinaryFloat64)
 
-	// read values and only aggregate values on valid rows
+	// read values and perform operation only if the row is valid
 	readCnt := reader.ReadTo(readStart, readEnd)
 	prevRunLen := 0
 	for i := readStart; i < readStart+readCnt; i++ {
 		val := q.LimitedSlice.Get(i)
-		if length, isRun := utils.CheckRunLength(val); isRun {
+		if length, isRun := utils.CheckRunLength(val); isRun { // is RLE run so stay in this idx and handle it
 			runVal := q.LimitedSlice.Get(i + 1)
 			for j := range length {
-				if q.LimitedSlice.Get(i+rwSpace+prevRunLen+j) != nil {
-					current := q.LimitedSlice.Get(i + rwSpace + prevRunLen + j)
-					switch operation.Op {
-					case Add:
-						q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, current.(float64)+runVal.(float64))
-					case Subtract:
-						q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, current.(float64)-runVal.(float64))
-					case Multiply:
-						q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, current.(float64)*runVal.(float64))
-					case Divide:
-						q.LimitedSlice.Set(i+rwSpace+prevRunLen+j, current.(float64)/runVal.(float64))
-					}
+				writerIdx := i + rwSpace + prevRunLen + j
+				if q.LimitedSlice.Get(writerIdx) != nil {
+					current := q.LimitedSlice.Get(writerIdx)
+					q.LimitedSlice.Set(writerIdx, operation.Op.compute(current.(float64), runVal.(float64)))
 				}
 			}
 			prevRunLen += length - 2
 			i += 1
 			continue
 		}
-		if q.LimitedSlice.Get(i+prevRunLen+rwSpace) != nil {
-			current := q.LimitedSlice.Get(i + prevRunLen + rwSpace)
-			switch operation.Op {
-			case Add:
-				q.LimitedSlice.Set(i+prevRunLen+rwSpace, current.(float64)+val.(float64))
-			case Subtract:
-				q.LimitedSlice.Set(i+prevRunLen+rwSpace, current.(float64)-val.(float64))
-			case Multiply:
-				q.LimitedSlice.Set(i+prevRunLen+rwSpace, current.(float64)*val.(float64))
-			case Divide:
-				q.LimitedSlice.Set(i+prevRunLen+rwSpace, current.(float64)/val.(float64))
-			}
+
+		// not RLE so continue as normal
+		writerIdx := i + prevRunLen + rwSpace
+		if q.LimitedSlice.Get(writerIdx) != nil {
+			current := q.LimitedSlice.Get(writerIdx)
+			q.LimitedSlice.Set(writerIdx, operation.Op.compute(current.(float64), val.(float64)))
 		}
 	}
 
 	return false
 }
 
+// checks the query plan for SharedScan type and extracts the query results
 func (q *QueryRunner) formatResults() []float64 {
 	res := []float64{}
 	for _, query := range q.QueryPlan {

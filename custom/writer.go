@@ -18,6 +18,7 @@ const (
 	ToBinary
 )
 
+// common methods and fields of CsvWriter and BinaryWriter
 type Writer interface {
 	WriteFrom(start int, end int)
 }
@@ -27,11 +28,14 @@ type baseWriter struct {
 	limitedSlice LimitedSlice
 }
 
+// writer for csv files
 type CsvWriter struct {
 	*baseWriter
 	writer *csv.Writer
 }
 
+// writer for all binary files, automatically detects data in limited slice
+// and writes the appropriate type to the file
 type BinaryWriter struct {
 	*baseWriter
 	writer *bufio.Writer
@@ -58,6 +62,7 @@ func newBaseWriter(filePath string, limitedSlice LimitedSlice) (*baseWriter, err
 	return bw, nil
 }
 
+// init writer depending on file type
 func NewWriter(filePath string, limitedSlice LimitedSlice, writerType WriterType) Writer {
 	bw, err := newBaseWriter(filePath, limitedSlice)
 	if err != nil {
@@ -85,6 +90,7 @@ func NewWriter(filePath string, limitedSlice LimitedSlice, writerType WriterType
 	return writer
 }
 
+// write to csv file rows from start to end
 func (w CsvWriter) WriteFrom(start int, end int) {
 	for i := start; i <= end; i++ {
 		csvData := w.limitedSlice.Get(i).(data.CsvData)
@@ -99,6 +105,8 @@ func (w CsvWriter) WriteFrom(start int, end int) {
 	}
 }
 
+// write to binary file data from start to end, automaticlaly detects
+// data type and writes appropriately to the binary file
 func (w BinaryWriter) WriteFrom(start int, end int) {
 	for i := start; i <= end; i++ {
 		data := w.limitedSlice.Get(i)

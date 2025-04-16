@@ -11,6 +11,7 @@ import (
 	"testing"
 )
 
+// test that the run length encoded columns can be decoded and is equivalent to the original column data
 func TestRLE(t *testing.T) {
 	metadatas := data.InitColumnStoreMetadata()
 	for _, metadata := range metadatas {
@@ -64,6 +65,7 @@ func TestRLE(t *testing.T) {
 	}
 }
 
+// helper to read data and serialize to Go type
 func read(reader *bufio.Reader, colType any) (any, error) {
 	var v any
 	var err error

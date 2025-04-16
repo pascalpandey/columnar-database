@@ -6,21 +6,32 @@ import (
 	"sync"
 )
 
+// check whih blocks qualify in a range
 type Filter interface {
 	GetQualifiedBlocksWithinRange(start, end int) []int
 }
 
+// filters rows between InclusiveMin and InclusiveMax
 type RangeFilterQuery[T int8 | float64] struct {
 	Column       *data.Metadata
 	InclusiveMin T
 	InclusiveMax T
 }
 
+// filters rows based on exact match
 type ExactFilterQuery struct {
 	Column *data.Metadata
 	Match  int8
 }
 
+// calculate minimum of a column
+type MinQuery struct {
+	Column *data.Metadata
+	Result float64
+	Lock   *sync.Mutex
+}
+
+// calculate average of a column
 type AvgQuery struct {
 	Column  *data.Metadata
 	Sum     float64
@@ -29,12 +40,7 @@ type AvgQuery struct {
 	Lock    *sync.Mutex
 }
 
-type MinQuery struct {
-	Column *data.Metadata
-	Result float64
-	Lock   *sync.Mutex
-}
-
+// calculate stdev of a column
 type StdevQuery struct {
 	Column     *data.Metadata
 	Sum        float64
@@ -44,6 +50,8 @@ type StdevQuery struct {
 	Lock       *sync.Mutex
 }
 
+// perform operations on the current loaded data from a column
+// with another column, used for minimum price per area query
 type OpType int
 
 const (
@@ -58,8 +66,10 @@ type Operation struct {
 	Op     OpType
 }
 
+// indicates aggregates to be run together
 type SharedScan []any
 
+// used by sorted month column to get range of blocks that qualify
 func (rfq *RangeFilterQuery[T]) GetQualifiedBlocksRange() (int, int) {
 	if !rfq.Column.Sorted {
 		return -1, -1
@@ -80,6 +90,7 @@ func (rfq *RangeFilterQuery[T]) GetQualifiedBlocksRange() (int, int) {
 	return start, end
 }
 
+// get qualified blocks for range query
 func (rfq *RangeFilterQuery[T]) GetQualifiedBlocksWithinRange(start, end int) []int {
 	qualBlocks := []int{}
 	if rfq.Column.ZoneMapIndexInt8 != nil {
@@ -105,6 +116,7 @@ func (rfq *RangeFilterQuery[T]) GetQualifiedBlocksWithinRange(start, end int) []
 	return qualBlocks
 }
 
+// get qualified blocks for exact query
 func (rfq *ExactFilterQuery) GetQualifiedBlocksWithinRange(start, end int) []int {
 	qualBlocks := []int{}
 	for i := start; i <= end; i++ {
@@ -115,6 +127,7 @@ func (rfq *ExactFilterQuery) GetQualifiedBlocksWithinRange(start, end int) []int
 	return qualBlocks
 }
 
+// evaluates whether the data is qualified or must be filtered out
 func evaluateFilter(query, val any) bool {
 	switch query := query.(type) {
 	case *RangeFilterQuery[int8]:
@@ -133,6 +146,8 @@ func evaluateFilter(query, val any) bool {
 	return false
 }
 
+// updates aggregate result based on the data point, need to lock because multiple
+// Go routines might be updating the same aggregate query
 func evaluateAggregate(query, val any) {
 	switch query := query.(type) {
 	case *MinQuery:
@@ -153,4 +168,19 @@ func evaluateAggregate(query, val any) {
 		query.Result = math.Sqrt(query.SumSquares/float64(query.NumData) - math.Pow(query.Sum/float64(query.NumData), 2))
 		query.Lock.Unlock()
 	}
+}
+
+// perform operation between data points from 2 columns
+func (op OpType) compute(x, y float64) float64 {
+	switch op {
+	case Add:
+		return x+y
+	case Subtract:
+		return x-y
+	case Multiply:
+		return x*y
+	case Divide:
+		return x/y
+	}
+	return -1
 }

@@ -2,6 +2,7 @@ package utils
 
 import "strconv"
 
+// check whether a value is data or run length, negative values are run lengths
 func CheckRunLength(v any) (int, bool) {
 	switch v := v.(type) {
 	case int8:

@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// test that the sorted file is actually sorted by month
 func TestFileSortedByMonth(t *testing.T) {
 	file, err := os.Open("../column_store/sorted.csv")
 	if err != nil {
@@ -17,7 +18,7 @@ func TestFileSortedByMonth(t *testing.T) {
 	reader := csv.NewReader(file)
 
 	var prevDate string
-	act := 0
+	rowIndex := 0
 
 	for {
 		row, err := reader.Read()
@@ -25,19 +26,20 @@ func TestFileSortedByMonth(t *testing.T) {
 			break
 		}
 
-		csvData := data.ParseRow(row)
+		csvData, _ := data.ParseRow(row, rowIndex)
 		currentDate := csvData.Month
 
 		if prevDate != "" && data.MonthToInt[currentDate] < data.MonthToInt[prevDate] {
 			t.Errorf("Error: Date is not sorted at row %d. Previous: %s, Current: %s\n",
-				act+1, prevDate, currentDate)
+				rowIndex+1, prevDate, currentDate)
 		}
 
 		prevDate = currentDate
-		act++
+		rowIndex++
 	}
 }
 
+// test that sorted data has all the data of the original file and is equivalent with it
 func TestSortedAndOriginalHaveSameData(t *testing.T) {
 	file1, err := os.Open("../ResalePricesSingapore.csv")
 	if err != nil {

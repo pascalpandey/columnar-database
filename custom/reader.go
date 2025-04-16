@@ -20,6 +20,7 @@ const (
 	FromBinaryString
 )
 
+// common fields and methods of the custom readers
 type Reader interface {
 	ReadTo(start int, end int) int
 	GetByteOffset() int64
@@ -32,11 +33,14 @@ type baseReader struct {
 	limitedSlice LimitedSlice
 }
 
+// reader to read csv files
 type CsvReader struct {
 	*baseReader
 	reader *csv.Reader
+	rowNumber int
 }
 
+// reader to read binary data of various types
 type BinaryReader[T string | float64 | int8] struct {
 	*baseReader
 	reader *bufio.Reader
@@ -67,6 +71,8 @@ func newBaseReader(filePath string, offset int64, limit int64, limitedSlice Limi
 	return br, nil
 }
 
+// init new reader depending on type, includes byte offset to read from middle of file and byte limit which when reached
+// by the file descriptor stops the reader from reading mroe data
 func NewReader(filePath string, offset int64, limit int64, limitedSlice LimitedSlice, readerType ReaderType) Reader {
 	br, err := newBaseReader(filePath, offset, limit, limitedSlice)
 	if err != nil {
@@ -106,15 +112,24 @@ func NewReader(filePath string, offset int64, limit int64, limitedSlice LimitedS
 	return reader
 }
 
+// loads data from disk and reads to the limited slice, stops when either
+// user defined ByteLimit or file EOF is reached, returns numebr of data read
 func (r *CsvReader) ReadTo(start int, end int) int {
 	readCnt := 0
 	for i := start; i <= end; i++ {
 		row, err := r.reader.Read()
+		r.rowNumber += 1
 		r.byteOffset += countCsvBytes(row)
 		if err == io.EOF {
 			break
 		}
-		r.limitedSlice.Set(i, data.ParseRow(row))
+		data, err := data.ParseRow(row, r.rowNumber)
+		if err != nil {
+			r.byteOffset -= countCsvBytes(row)
+			i -= 1
+			continue
+		}
+		r.limitedSlice.Set(i, data)
 		readCnt += 1
 		if r.byteLimit != -1 && r.byteOffset >= r.byteLimit {
 			break
@@ -123,10 +138,13 @@ func (r *CsvReader) ReadTo(start int, end int) int {
 	return readCnt
 }
 
+// get offset of current file descriptor
 func (r *CsvReader) GetByteOffset() int64 {
 	return r.byteOffset
 }
 
+// loads data from disk (type is based on generic T type paraemter) and reads to the limited slice,
+//  stops when either user defined ByteLimit or file EOF is reached, returns numebr of data read
 func (r *BinaryReader[T]) ReadTo(start int, end int) int {
 	readCnt := 0
 	for i := start; i <= end; i++ {
@@ -170,10 +188,12 @@ func (r *BinaryReader[T]) ReadTo(start int, end int) int {
 	return readCnt
 }
 
+// get offset of current file descriptor
 func (r *BinaryReader[T]) GetByteOffset() int64 {
 	return r.byteOffset
 }
 
+// count byte width of one csv line
 func countCsvBytes(arr []string) int64 {
 	var res int64
 	for _, str := range arr {
