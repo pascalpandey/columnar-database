@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func ParseFlags() (int8, int8, string) {
+func ParseFlags() (int8, int8, float64, string, string) {
 	matric := flag.String("matric", "", "Matriculation number for data query")
 	rawData := flag.String("data", "", "File location of raw data")
 	flag.Parse()
@@ -65,5 +65,5 @@ func ParseFlags() (int8, int8, string) {
 		os.Exit(1)
 	}
 
-	return monthInt, int8(townInt), *rawData
+	return monthInt, int8(townInt), 80, *rawData, *matric
 }

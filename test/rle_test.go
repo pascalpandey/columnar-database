@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"sc4023/data"
-	"strconv"
+	"sc4023/utils"
 	"testing"
 )
 
@@ -47,7 +47,7 @@ func TestRLE(t *testing.T) {
 			}
 
 			valRle, _ = read(rleReader, metadata.Type)
-			if lg, isRun := checkRunLength(valRle); isRun {
+			if lg, isRun := utils.CheckRunLength(valRle); isRun {
 				lgth = lg
 				valRle, _ = read(rleReader, metadata.Type)
 				if valRle != valRaw {
@@ -84,23 +84,4 @@ func read(reader *bufio.Reader, colType any) (any, error) {
 		}
 	}
 	return v, err
-}
-
-func checkRunLength(v any) (int, bool) {
-	switch v := v.(type) {
-	case int8:
-		if v < 0 {
-			return -int(v), true
-		}
-	case float64:
-		if v < 0 {
-			return -int(v), true
-		}
-	case string:
-		vi, err := strconv.Atoi(v)
-		if err == nil && vi < 0 {
-			return -int(vi), true
-		}
-	}
-	return -1, false
 }

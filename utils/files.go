@@ -2,9 +2,12 @@ package utils
 
 import (
 	"bufio"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sc4023/data"
+	"strings"
 )
 
 func CleanDir(dir string) error {
@@ -35,4 +38,35 @@ func CountHeaderByte(filePath string) int {
 	}
 
 	return len(line)
+}
+
+func SaveResults(matric string, month int8, town int8, area float64, results []float64) {
+	filePath := fmt.Sprintf("results/ScanResult_%s.csv", matric)
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		fmt.Printf("failed to create directory %s: %s\n", dir, err)
+		return
+	}
+
+	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("failed to open file %s: %s\n", filePath, err)
+		return
+	}
+
+	fmt.Printf("Result:\n")
+	categories := []string{"Minimum Price", "Average Price", "Standard Deviation of Price", "Minimum Price per Square Meter"}
+	for i := 0; i<4; i++ {
+		fmt.Printf("- %s: %.2f\n", categories[i], results[i])
+	}
+
+	writer := csv.NewWriter(file)
+	writer.Write([]string{"Year", "Month", "Town", "Category", "Value"})
+	for i := 0; i<4; i++ {
+		date := strings.Split(data.IntToMonth[month], "-")
+		writer.Write([]string{date[0], date[1], data.IntToTown[town], categories[i], fmt.Sprintf("%.2f", results[i])})
+	}
+	writer.Flush()
+
+	fmt.Printf("Results saved to: %s", filePath)
 }

@@ -2,28 +2,27 @@ package data
 
 import "math"
 
+type Metadatas []*Metadata
+
 type Metadata struct {
 	Name                string
 	Type                any
 	DataSizeByte        int64
+	Sorted              bool
 	RunLengthEncode     bool
 	ZoneMapIndexInt8    []ZoneMap[int8]
 	ZoneMapIndexFloat64 []ZoneMap[float64]
-	BitMapIndex         [][]bool
+	BitMapIndex         []Bitmap
 	OffsetMapIndex      []int64
 }
 
-type ZoneMap[T int8 | float64] struct {
-	Min T
-	Max T
-}
-
-func InitColumnStoreMetadata() []*Metadata {
-	return []*Metadata{
+func InitColumnStoreMetadata() Metadatas {
+	return Metadatas{
 		{
 			Name:             "month",
 			Type:             int8(0),
 			DataSizeByte:     1,
+			Sorted:           true,
 			RunLengthEncode:  true,
 			ZoneMapIndexInt8: []ZoneMap[int8]{},
 			OffsetMapIndex:   []int64{},
@@ -33,7 +32,7 @@ func InitColumnStoreMetadata() []*Metadata {
 			Type:            int8(0),
 			DataSizeByte:    1,
 			RunLengthEncode: true,
-			BitMapIndex:     [][]bool{},
+			BitMapIndex:     []Bitmap{},
 			OffsetMapIndex:  []int64{},
 		},
 		{
@@ -89,7 +88,7 @@ func InitColumnStoreMetadata() []*Metadata {
 	}
 }
 
-func (m *Metadata) InitBlockIndexes() {
+func (m *Metadata) InitBlockIndexes(blockSize int64) {
 	if m.ZoneMapIndexInt8 != nil {
 		m.ZoneMapIndexInt8 = append(m.ZoneMapIndexInt8, ZoneMap[int8]{Min: math.MaxInt8})
 	}
@@ -101,11 +100,11 @@ func (m *Metadata) InitBlockIndexes() {
 		m.BitMapIndex = append(m.BitMapIndex, bitMap)
 	}
 	if m.OffsetMapIndex != nil {
-		m.OffsetMapIndex = append(m.OffsetMapIndex, 0)
+		m.OffsetMapIndex = append(m.OffsetMapIndex, blockSize * m.DataSizeByte)
 	}
 }
 
-func (m *Metadata) UpdateBlockIndexes(val any, blockSize int64) {
+func (m *Metadata) UpdateBlockIndexes(val any) {
 	if m.ZoneMapIndexInt8 != nil {
 		v := val.(int8)
 		currentZoneMap := &m.ZoneMapIndexInt8[len(m.ZoneMapIndexInt8)-1]
@@ -121,7 +120,13 @@ func (m *Metadata) UpdateBlockIndexes(val any, blockSize int64) {
 	if m.BitMapIndex != nil {
 		m.BitMapIndex[len(m.BitMapIndex)-1][val.(int8)] = true
 	}
-	if m.OffsetMapIndex != nil {
-		m.OffsetMapIndex[len(m.OffsetMapIndex)-1] = blockSize * m.DataSizeByte
+}
+
+func (ms Metadatas) GetColMetadata(name string) *Metadata {
+	for _, metadata := range ms {
+		if metadata.Name == name {
+			return metadata
+		}
 	}
+	return nil
 }

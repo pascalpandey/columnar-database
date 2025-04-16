@@ -3,7 +3,6 @@ package store
 import (
 	"container/heap"
 	"fmt"
-	//"reflect"
 	"sc4023/custom"
 	"sc4023/data"
 	"sc4023/utils"
@@ -15,7 +14,7 @@ type Store struct {
 	DataPath            string
 	SortedChunkDataPath string
 	SortedDataPath      string
-	ColumnStoreMetadata []*data.Metadata
+	ColumnStoreMetadata data.Metadatas
 }
 
 func (s Store) InitColumnStore() {
@@ -165,6 +164,7 @@ func (s Store) processColumns() {
 		writer := custom.NewWriter(fmt.Sprintf("column_store/rle_%s", metadata.Name), s.LimitedSlice, custom.ToBinary)
 
 		blockSize := 250
+		prevWriterIdx := 0
 		for {
 			readCnt := reader.ReadTo(0, s.LimitedSlice.GetLimit()-1)
 			if readCnt == 0 {
@@ -175,10 +175,10 @@ func (s Store) processColumns() {
 			readerIdx := 0
 			for readerIdx < readCnt {
 				if readerIdx%blockSize == 0 {
-					metadata.InitBlockIndexes()
+					metadata.InitBlockIndexes(int64(prevWriterIdx+writerIdx))
 				}
 				current := s.LimitedSlice.Get(readerIdx)
-				metadata.UpdateBlockIndexes(current, int64(writerIdx+1))
+				metadata.UpdateBlockIndexes(current)
 				if metadata.RunLengthEncode {
 					if runIdx == -1 { // no active run
 						if readerIdx > 0 && current == s.LimitedSlice.Get(readerIdx-1) {
@@ -201,6 +201,7 @@ func (s Store) processColumns() {
 				writerIdx += 1
 				readerIdx += 1
 			}
+			prevWriterIdx += writerIdx
 			s.endEncodingRun(&runIdx, metadata.Type)
 			writer.WriteFrom(0, writerIdx-1)
 		}

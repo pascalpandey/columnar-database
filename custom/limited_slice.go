@@ -29,3 +29,9 @@ func (l *LimitedSlice) Sort(start int, end int, fn func(i, j int) bool) {
 func (l *LimitedSlice) GetLimit() int {
 	return l.limit
 }
+
+func (l *LimitedSlice) Reset(start, end int) {
+	for i := start; i <= end; i++ {
+		l.Set(i, nil)
+	}
+}
