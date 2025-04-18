@@ -272,7 +272,7 @@ func (q *QueryRunner) handleSharedScan(sharedScan SharedScan, blockIdx, workerId
 	}
 
 	// perform shared scan on the valid loaded data
-	for i := writeStart; i < writeEnd; i++ {
+	for i := writeStart; i <= writeEnd; i++ {
 		val := q.LimitedSlice.Get(i)
 		if val != nil {
 			for _, scan := range sharedScan {
