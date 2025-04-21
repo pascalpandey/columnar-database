@@ -58,6 +58,8 @@ go mod tidy
 
 ## Running the Application
 
+Please place the raw data file in the root directory, or specify its path with the `-data` flag. Running the program will create the column store in the `./column_store` directory and the results in the `./results` directory.
+
 ```bash
 go run main.go -matric="U2220371G" -data="./ResalePricesSingapore.csv"
 ```
