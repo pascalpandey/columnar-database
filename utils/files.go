@@ -12,6 +12,13 @@ import (
 
 // used to clean column_store directory on each run
 func CleanDir(dir string) error {
+	_, statErr := os.Stat(dir)
+	if os.IsNotExist(statErr) {
+		return nil
+	} else if statErr != nil {
+		return statErr
+	}
+	
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("Failed to delete directory: %v\n", err)
