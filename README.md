@@ -51,8 +51,8 @@ columnar-database/
 - Go 1.23.2 or higher
 
 ```bash
-git clone https://github.com/pascalpandey/sc4023
-cd sc4023
+git clone https://github.com/pascalpandey/columnar-database
+cd columnar-database
 go mod tidy
 ```
 
