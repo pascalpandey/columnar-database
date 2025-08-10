@@ -9,7 +9,7 @@ To simulate big data environmets, we use custom slice (Go equivalent of arrays),
 ## Project Structure
 
 ```
-sc4023/
+columnar-database/
 │
 ├── main.go                        # Main entry point
 │
