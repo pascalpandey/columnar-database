@@ -1,4 +1,4 @@
-# SC4023
+# Columnar Database
 
 ## Project Overview
 
